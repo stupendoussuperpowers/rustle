@@ -1,13 +1,13 @@
 use pcap::{Device, PacketHeader};
 use pktparse::{
-    ethernet::{self, parse_ethernet_frame, EtherType, EthernetFrame},
+    ethernet::{parse_ethernet_frame, EtherType, EthernetFrame},
     ipv4::parse_ipv4_header,
     ipv6::parse_ipv6_header,
     tcp::parse_tcp_header,
-    udp::UdpHeader,
+    udp::{parse_udp_header, UdpHeader},
 };
 
-use pktparse::ip::IPProtocol::{TCP, UDP};
+// use pktparse::ip::IPProtocol::{TCP, UDP};
 use pktparse::ipv4::IPv4Header;
 use pktparse::ipv6::IPv6Header;
 
@@ -30,6 +30,7 @@ impl AppLayer {
     fn get_app_info(self) -> String {
         match self {
             AppLayer::TCP(value) => format!("TCP    {} -> {}", value.source_port, value.dest_port),
+            AppLayer::UDP(value) => format!("UDP    {} -> {}", value.source_port, value.dest_port),
             _ => format!(""),
         }
     }
@@ -111,6 +112,10 @@ fn main() {
             pktparse::ip::IPProtocol::TCP => {
                 let (_a, b) = parse_tcp_header(&remaining.unwrap()).unwrap();
                 Some(AppLayer::TCP(b))
+            }
+            pktparse::ip::IPProtocol::UDP => {
+                let (_a, b) = parse_udp_header(&remaining.unwrap()).unwrap();
+                Some(AppLayer::UDP(b))
             }
             _ => None,
         };
