@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 pcap = "2.2.0"
+pktparse = "0.7.1"

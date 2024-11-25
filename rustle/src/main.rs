@@ -1,61 +1,72 @@
-use pcap::Device;
+use pcap::{Device, PacketHeader};
+use pktparse::{
+    ethernet::{self, parse_ethernet_frame, EtherType, EthernetFrame},
+    ipv4::parse_ipv4_header,
+    ipv6::parse_ipv6_header,
+    tcp::parse_tcp_header,
+    udp::UdpHeader,
+};
+
+use pktparse::ip::IPProtocol::{TCP, UDP};
+use pktparse::ipv4::IPv4Header;
+use pktparse::ipv6::IPv6Header;
+
+use pktparse::tcp::TcpHeader;
+
 use std::env;
 
-struct Ethernet {
-    source: [u8; 6],
-    destination: [u8; 6],
-    packet_type: [u8; 2],
+#[derive(Debug)]
+enum IPlayer {
+    V4(IPv4Header),
+    V6(IPv6Header),
+}
+#[derive(Debug)]
+enum AppLayer {
+    TCP(TcpHeader),
+    UDP(UdpHeader),
 }
 
-impl Ethernet {
-    fn from_slice(src: &[u8]) -> Result<Self, ()> {
-        if src.len() < 14 {
-            return Err(());
+impl AppLayer {
+    fn get_app_info(self) -> String {
+        match self {
+            AppLayer::TCP(value) => format!("TCP    {} -> {}", value.source_port, value.dest_port),
+            _ => format!(""),
         }
-
-        let mut destination = [0u8; 6];
-        let mut source = [0u8; 6];
-        let mut packet_type = [0u8; 2];
-
-        destination.copy_from_slice(&src[0..6]);
-        source.copy_from_slice(&src[6..12]);
-        packet_type.copy_from_slice(&src[12..14]);
-
-        Ok(Self {
-            source,
-            destination,
-            packet_type,
-        })
     }
 }
 
-#[derive(Debug)]
-struct IPv4 {
-    source: [u8; 4],
-    destination: [u8; 4],
+impl IPlayer {
+    fn get_source_destination(self) -> String {
+        match self {
+            IPlayer::V4(value) => format!("{}   {}", value.source_addr, value.dest_addr),
+            IPlayer::V6(value) => format!("{}   {}", value.source_addr, value.dest_addr),
+        }
+    }
 }
 
-impl IPv4 {
-    fn from_slice(src: &[u8]) -> Result<Self, ()> {
-        let mut source = [0u8; 4];
-        let mut destination = [0u8; 4];
+struct CapturedFrame {
+    pub packet_header: PacketHeader,
+    pub ethernet: Option<EthernetFrame>,
+    pub internet: Option<IPlayer>,
+    pub application: Option<AppLayer>,
+}
 
-        source.copy_from_slice(&src[12..16]);
-        destination.copy_from_slice(&src[16..20]);
-
-        return Ok(Self {
-            source,
-            destination,
-        });
+impl CapturedFrame {
+    fn print_status_line(self) {
+        println!(
+            "{} {}  {}  {}",
+            self.packet_header.len,
+            self.packet_header.ts.tv_sec,
+            IPlayer::get_source_destination(self.internet.unwrap()),
+            AppLayer::get_app_info(self.application.unwrap())
+        )
     }
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    println!("Args: {:#?}", args);
 
     let interface = &args[1];
-    let save_file_path = if args.len() > 2 { Some(&args[2]) } else { None };
 
     let dev_list = Device::list().unwrap();
 
@@ -63,25 +74,63 @@ fn main() {
 
     let mut capture = dev.clone().open().unwrap();
 
+    let savefile = if args.len() > 2 {
+        let savefile_mut = capture.savefile(&args[2]).unwrap();
+        &mut Some(savefile_mut)
+    } else {
+        &mut None
+    };
+
     while let Ok(packet) = capture.next_packet() {
-        let ethernet_header = Ethernet::from_slice(&packet.data).unwrap();
+        let (remaining, ethernet_frame) = parse_ethernet_frame(&packet.data).unwrap();
 
-        println!(
-            "Ethernet Packet:\n Destination: {:x?} \n Source: {:x?} \n Type: {:x?}",
-            ethernet_header.destination, ethernet_header.source, ethernet_header.packet_type
-        );
+        let (remaining, internet_frame) = match ethernet_frame.ethertype {
+            EtherType::IPv4 => {
+                let (a, b) = parse_ipv4_header(&remaining).unwrap();
+                (Some(a), Some(IPlayer::V4(b)))
+            }
+            EtherType::IPv6 => {
+                let (a, b) = parse_ipv6_header(&remaining).unwrap();
+                (Some(a), Some(IPlayer::V6(b)))
+            }
+            _ => (None, None),
+        };
 
-        // IPv4...
-        if ethernet_header.packet_type == [8, 0] {
-            let ipv4_header = IPv4::from_slice(&packet.data[14..]).unwrap();
-            println!("{:#?}", ipv4_header);
-
-            break;
+        if internet_frame.is_none() {
+            continue;
         }
-    }
 
-    if save_file_path.is_some() {
-        println!("Saving to {}", save_file_path.unwrap());
-        capture.savefile(save_file_path.unwrap()).unwrap();
+        let internet_frame_val = internet_frame.unwrap();
+
+        let app_protocol = match internet_frame_val {
+            IPlayer::V4(iframe) => iframe.protocol,
+            IPlayer::V6(iframe) => iframe.next_header,
+        };
+
+        let app_frame = match app_protocol {
+            pktparse::ip::IPProtocol::TCP => {
+                let (_a, b) = parse_tcp_header(&remaining.unwrap()).unwrap();
+                Some(AppLayer::TCP(b))
+            }
+            _ => None,
+        };
+
+        if app_frame.is_none() {
+            continue;
+        }
+
+        let cap_frame = CapturedFrame {
+            packet_header: *packet.header,
+            ethernet: Some(ethernet_frame),
+            internet: Some(internet_frame_val),
+            application: Some(app_frame.unwrap()),
+        };
+
+        cap_frame.print_status_line();
+
+        match savefile {
+            Some(file) => file.write(&packet),
+            None => (),
+        }
     }
 }
