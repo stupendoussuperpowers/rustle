@@ -31,7 +31,6 @@ impl AppLayer {
         match self {
             AppLayer::TCP(value) => format!("TCP    {} -> {}", value.source_port, value.dest_port),
             AppLayer::UDP(value) => format!("UDP    {} -> {}", value.source_port, value.dest_port),
-            _ => format!(""),
         }
     }
 }
@@ -55,11 +54,12 @@ struct CapturedFrame {
 impl CapturedFrame {
     fn print_status_line(self) {
         println!(
-            "{} {}  {}  {}",
+            "{} {}  {}  {}      {:?}",
             self.packet_header.len,
             self.packet_header.ts.tv_sec,
             IPlayer::get_source_destination(self.internet.unwrap()),
-            AppLayer::get_app_info(self.application.unwrap())
+            AppLayer::get_app_info(self.application.unwrap()),
+            self.ethernet
         )
     }
 }
