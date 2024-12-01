@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+getopt = "1.1.7"
 pcap = "2.2.0"
 pktparse = "0.7.1"

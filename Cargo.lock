@@ -54,6 +54,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "getopt"
+version = "1.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a9e40b04867f241a94b98f4649825925553807ae34f07b953a590270f45d9d4"
+
+[[package]]
 name = "libc"
 version = "0.2.164"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -154,6 +160,7 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 name = "rustle"
 version = "0.1.0"
 dependencies = [
+ "getopt",
  "pcap",
  "pktparse",
 ]
