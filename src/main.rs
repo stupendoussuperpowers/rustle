@@ -134,6 +134,8 @@ struct PcapOptions {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
+    let help_string = "< -i / -f >\tInterface to capture. Alternatively, use -f for reading a pcapng file\n[-o]\t\tOutput file for captured packets";
+
     let mut opts = getopt::Parser::new(&args, "f:i:o:");
 
     let mut capt: Capture<dyn Activated>;
@@ -159,7 +161,7 @@ fn main() {
     }
 
     if pcap_options.file.is_none() && pcap_options.interface.is_none() {
-        println!("Help string");
+        println!("{}", help_string);
         exit(0);
     }
 
